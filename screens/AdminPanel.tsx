@@ -205,58 +205,115 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                     )}
                 </div>
             );
-        case 'API':
-            return (
-                <div className="space-y-6 animate-fade-in">
-                    <div className="flex justify-between items-center border-b border-gray-700 pb-2">
-                        <h3 className="font-pixel text-central-accent text-lg">API KEY ROTATION POOL</h3>
-                        {isSavingConfig && <span className="text-[10px] animate-pulse text-green-500">SAVING TO DB...</span>}
-                    </div>
-                    <div className="bg-black/40 border border-gray-700 p-4 mb-4">
-                        <p className="text-xs text-gray-400 font-mono mb-2">
-                            Add multiple Gemini Keys. The system will randomly rotate between them. Changes are saved to SQL automatically.
-                        </p>
-                        <div className="flex gap-2">
-                            <input 
-                                type="text"
-                                className="flex-1 bg-black/50 border border-gray-600 p-3 text-white font-mono focus:border-central-accent outline-none text-xs"
-                                value={inputKey}
-                                onChange={e => setInputKey(e.target.value)}
-                                placeholder="Paste API Key here (sk-...)"
-                            />
-                            <button 
-                                onClick={handleAddKey}
-                                disabled={isSavingConfig}
-                                className="bg-green-700 text-white px-4 font-pixel text-[10px] hover:bg-green-600 border border-green-900 disabled:opacity-50"
-                            >
-                                ADD
-                            </button>
-                        </div>
-                    </div>
+        // Di dalam renderContent untuk tab 'API':
+case 'API':
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex justify-between items-center border-b border-gray-700 pb-2">
+        <h3 className="font-pixel text-central-accent text-lg">API KEY ROTATION POOL</h3>
+        {isSavingConfig && <span className="text-[10px] animate-pulse text-green-500">SAVING TO DB...</span>}
+      </div>
+      
+      <div className="bg-black/40 border border-gray-700 p-4 mb-4">
+        <p className="text-xs text-gray-400 font-mono mb-2">
+          🔧 Add multiple Gemini API Keys. The system will automatically rotate between them to avoid rate limits.
+          <br/>
+          <span className="text-yellow-500">Format: sk-xxxxxxxxxxxxxxxx</span>
+        </p>
+        
+        {/* API Key Counter */}
+        <div className="flex items-center gap-4 mb-3 p-2 bg-gray-900/50 rounded">
+          <div className={`w-3 h-3 rounded-full ${config.geminiKeys && config.geminiKeys.length > 2 ? 'bg-green-500' : config.geminiKeys && config.geminiKeys.length > 0 ? 'bg-yellow-500' : 'bg-red-500'}`}></div>
+          <span className="text-xs font-mono">
+            Active Keys: <span className={`font-bold ${config.geminiKeys && config.geminiKeys.length > 2 ? 'text-green-400' : config.geminiKeys && config.geminiKeys.length > 0 ? 'text-yellow-400' : 'text-red-400'}`}>
+              {config.geminiKeys?.length || 0}
+            </span>
+            {config.geminiKeys && config.geminiKeys.length <= 2 && (
+              <span className="text-yellow-500 ml-2">(Recommended: 3+ keys)</span>
+            )}
+          </span>
+        </div>
+        
+        <div className="flex gap-2">
+          <input 
+            type="password"
+            className="flex-1 bg-black/50 border border-gray-600 p-3 text-white font-mono focus:border-central-accent outline-none text-xs placeholder-gray-500"
+            value={inputKey}
+            onChange={e => setInputKey(e.target.value)}
+            placeholder="Paste Gemini API Key here (starts with 'sk-...')"
+          />
+          <button 
+            onClick={handleAddKey}
+            disabled={isSavingConfig || !inputKey.trim()}
+            className="bg-green-700 text-white px-4 font-pixel text-[10px] hover:bg-green-600 border border-green-900 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            ADD KEY
+          </button>
+        </div>
+        
+        {/* Quick Help */}
+        <div className="mt-3 text-[10px] text-gray-500 font-mono">
+          💡 Get keys from: <a href="https://aistudio.google.com/apikey" target="_blank" className="text-blue-400 hover:underline">Google AI Studio</a>
+        </div>
+      </div>
 
-                    <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scroll">
-                        {config.geminiKeys && config.geminiKeys.map((key, idx) => (
-                            <div key={idx} className="flex justify-between items-center bg-gray-900/50 p-2 border-l-2 border-central-accent">
-                                <div className="font-mono text-xs text-gray-300">
-                                    {key.substring(0, 8)}...{key.substring(key.length - 6)}
-                                </div>
-                                <button 
-                                    onClick={() => handleRemoveKey(idx)}
-                                    disabled={isSavingConfig}
-                                    className="text-red-500 hover:text-white text-[10px] font-pixel border border-transparent hover:border-red-500 px-2"
-                                >
-                                    DELETE
-                                </button>
-                            </div>
-                        ))}
-                        {(!config.geminiKeys || config.geminiKeys.length === 0) && (
-                            <div className="text-center text-gray-600 font-mono text-xs py-4">
-                                NO KEYS CONFIGURED. SYSTEM WILL ATTEMPT TO USE ENV KEY.
-                            </div>
-                        )}
-                    </div>
-                </div>
-            );
+      <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scroll pr-1">
+        {config.geminiKeys && config.geminiKeys.map((key, idx) => (
+          <div key={idx} className="flex justify-between items-center bg-gray-900/50 p-3 border-l-2 border-central-accent hover:bg-gray-800 transition-colors">
+            <div className="font-mono text-xs">
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${idx === 0 ? 'bg-green-500 animate-pulse' : 'bg-gray-600'}`}></span>
+                <span className="text-gray-300">
+                  KEY {idx + 1}: 
+                  <span className="ml-2 text-gray-400 select-all">
+                    {key.substring(0, 12)}...{key.substring(key.length - 8)}
+                  </span>
+                </span>
+              </div>
+              <div className="text-[10px] text-gray-500 mt-1">
+                Status: <span className="text-green-400">Active</span>
+              </div>
+            </div>
+            <button 
+              onClick={() => handleRemoveKey(idx)}
+              disabled={isSavingConfig}
+              className="text-red-500 hover:text-white text-[10px] font-pixel border border-transparent hover:border-red-500 px-3 py-1 hover:bg-red-900/30 transition-colors"
+              title="Delete this key"
+            >
+              DELETE
+            </button>
+          </div>
+        ))}
+        
+        {(!config.geminiKeys || config.geminiKeys.length === 0) && (
+          <div className="text-center text-gray-600 font-mono text-xs py-8 border-2 border-dashed border-gray-800 rounded">
+            <div className="text-4xl mb-2 opacity-30">🔑</div>
+            NO API KEYS CONFIGURED
+            <div className="mt-2 text-[10px] text-red-400">
+              System will not function without API keys!
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* Test Connection Button */}
+      <div className="pt-4 border-t border-gray-800">
+        <button 
+          onClick={async () => {
+            if (!config.geminiKeys || config.geminiKeys.length === 0) {
+              alert("No API keys to test!");
+              return;
+            }
+            
+            alert(`Testing ${config.geminiKeys.length} API keys...\nFirst key: ${config.geminiKeys[0].substring(0, 15)}...\n\nSystem will initialize Gemini service on next chat.`);
+          }}
+          className="w-full bg-blue-900/30 text-blue-400 border border-blue-700 p-3 font-mono text-xs hover:bg-blue-800/30 transition-colors"
+        >
+          🔧 TEST API CONNECTION (Next chat will test keys)
+        </button>
+      </div>
+    </div>
+  );
         case 'GLOBAL':
             return (
                 <div className="space-y-6 animate-fade-in">
