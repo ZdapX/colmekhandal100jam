@@ -130,6 +130,21 @@
   }
 }
 </script>
+
+    <!-- Di dalam <head>, tambahkan ini: -->
+<script>
+  // POLYFILL CRITICAL untuk process.env
+  window.process = window.process || {};
+  window.process.env = window.process.env || {};
+  
+  // Load dari Vite environment variables
+  window.process.env.VITE_GEMINI_API_KEY = window.process.env.VITE_GEMINI_API_KEY || '';
+  window.process.env.VITE_SUPABASE_URL = window.process.env.VITE_SUPABASE_URL || '';
+  window.process.env.VITE_SUPABASE_KEY = window.process.env.VITE_SUPABASE_KEY || '';
+  
+  console.log('Polyfill loaded for process.env');
+</script>
+    
 </head>
   <body>
     <div id="root"></div>
