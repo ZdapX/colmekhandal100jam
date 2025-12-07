@@ -121,92 +121,125 @@ const Terminal: React.FC<TerminalProps> = ({ currentUser, onNavigate, config, on
     return parts;
   };
 
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if ((!input.trim() && !selectedFile) || config.maintenanceMode || isThinking) return;
+  // Di dalam handleSend function:
+const handleSend = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if ((!input.trim() && !selectedFile) || config.maintenanceMode || isThinking) return;
 
-    const userMsg: ChatMessage = {
-      role: 'user',
-      text: input,
-      image: filePreview || undefined,
-      timestamp: Date.now()
-    };
-
-    setMessages(prev => [...prev, userMsg]);
-    setInput('');
-    setSelectedFile(null);
-    setFilePreview(null);
-    setIsThinking(true);
-
-    const aiName = currentUser?.aiName || 'CentralGPT';
-    const devName = currentUser?.devName || 'XdpzQ';
-    
-    const persona = PERSONA_TEMPLATE
-      .replace(/{{AI_NAME}}/g, aiName)
-      .replace(/{{DEV_NAME}}/g, devName);
-    
-    const devInfo = DEV_INFO_TEMPLATE
-      .replace(/{{AI_NAME}}/g, aiName)
-      .replace(/{{DEV_NAME}}/g, devName);
-
-    try {
-      if (input.toLowerCase().includes('dev') || input.toLowerCase().includes('siapa pencipta') || input.toLowerCase().includes('created you')) {
-         setTimeout(() => {
-            const responseText = devInfo;
-            setMessages(prev => [...prev, {
-                role: 'model',
-                text: responseText,
-                timestamp: Date.now()
-            }]);
-            
-            // Log to History
-            onAddToHistory({
-                id: Date.now().toString(),
-                username: currentUser?.username || 'GUEST',
-                aiName: aiName,
-                userMessage: userMsg.text,
-                aiResponse: responseText,
-                timestamp: new Date().toLocaleTimeString()
-            });
-
-            setIsThinking(false);
-         }, 800);
-         return;
-      }
-
-      const responseText = await generateResponse(
-        userMsg.text, 
-        persona, 
-        userMsg.image
-      );
-
-      setMessages(prev => [...prev, {
-        role: 'model',
-        text: responseText,
-        timestamp: Date.now()
-      }]);
-
-      // Log to History
-      onAddToHistory({
-        id: Date.now().toString(),
-        username: currentUser?.username || 'GUEST',
-        aiName: aiName,
-        userMessage: userMsg.text,
-        aiResponse: responseText,
-        timestamp: new Date().toLocaleTimeString()
-      });
-
-    } catch (error) {
-      setMessages(prev => [...prev, {
-        role: 'system',
-        text: 'Error: Connection lost to underground node.',
-        timestamp: Date.now()
-      }]);
-    } finally {
-      setIsThinking(false);
-    }
+  const userMsg: ChatMessage = {
+    role: 'user',
+    text: input,
+    image: filePreview || undefined,
+    timestamp: Date.now()
   };
 
+  setMessages(prev => [...prev, userMsg]);
+  setInput('');
+  setSelectedFile(null);
+  setFilePreview(null);
+  setIsThinking(true);
+
+  const aiName = currentUser?.aiName || 'CentralGPT';
+  const devName = currentUser?.devName || 'XdpzQ';
+  
+  const persona = PERSONA_TEMPLATE
+    .replace(/{{AI_NAME}}/g, aiName)
+    .replace(/{{DEV_NAME}}/g, devName);
+  
+  const devInfo = DEV_INFO_TEMPLATE
+    .replace(/{{AI_NAME}}/g, aiName)
+    .replace(/{{DEV_NAME}}/g, devName);
+
+  try {
+    // Cek jika pertanyaan tentang developer
+    if (input.toLowerCase().includes('dev') || 
+        input.toLowerCase().includes('siapa pencipta') || 
+        input.toLowerCase().includes('created you') ||
+        input.toLowerCase().includes('who created')) {
+      
+      setTimeout(() => {
+        const responseText = devInfo;
+        setMessages(prev => [...prev, {
+          role: 'model',
+          text: responseText,
+          timestamp: Date.now()
+        }]);
+        
+        // Log to History
+        onAddToHistory({
+          id: Date.now().toString(),
+          username: currentUser?.username || 'GUEST',
+          aiName: aiName,
+          userMessage: userMsg.text,
+          aiResponse: responseText,
+          timestamp: new Date().toLocaleTimeString()
+        });
+
+        setIsThinking(false);
+      }, 800);
+      return;
+    }
+
+    console.log("🤖 Sending request to Gemini...");
+    const responseText = await generateResponse(
+      userMsg.text, 
+      persona, 
+      userMsg.image
+    );
+
+    setMessages(prev => [...prev, {
+      role: 'model',
+      text: responseText,
+      timestamp: Date.now()
+    }]);
+
+    // Log to History
+    onAddToHistory({
+      id: Date.now().toString(),
+      username: currentUser?.username || 'GUEST',
+      aiName: aiName,
+      userMessage: userMsg.text,
+      aiResponse: responseText,
+      timestamp: new Date().toLocaleTimeString()
+    });
+
+  } catch (error: any) {
+    console.error("💥 Chat error:", error);
+    
+    // Error handling yang lebih baik
+    let errorMessage = '';
+    const errorMsg = error.message?.toLowerCase() || '';
+    
+    if (errorMsg.includes('rate limit') || errorMsg.includes('429') || errorMsg.includes('quota')) {
+      errorMessage = '⚠️ **API Rate Limit Exceeded**\n\nSilakan tunggu beberapa saat atau tambah lebih banyak API key di panel Admin.\n\nTips:\n1. Login sebagai admin (key: DAFAPUTRA)\n2. Buka Admin Panel → API Manager\n3. Tambah 3-5 API key dari Google AI Studio';
+    } else if (errorMsg.includes('api key') || errorMsg.includes('invalid')) {
+      errorMessage = '🔑 **API Key Configuration Error**\n\nAPI key tidak valid atau belum dikonfigurasi.\n\nSilakan konfigurasi API key:\n1. Login sebagai admin\n2. Tambah API key yang valid\n3. Restart aplikasi';
+    } else if (errorMsg.includes('not configured')) {
+      errorMessage = '⚙️ **System Configuration Required**\n\nGemini API belum dikonfigurasi.\n\nHubungi administrator untuk menambahkan API key.';
+    } else {
+      errorMessage = `❌ **System Error**\n\n${error.message || 'Unknown error occurred'}\n\nSilakan coba lagi atau hubungi support.`;
+    }
+    
+    setMessages(prev => [...prev, {
+      role: 'system',
+      text: errorMessage,
+      timestamp: Date.now()
+    }]);
+    
+    // Juga log error ke history untuk debugging
+    onAddToHistory({
+      id: Date.now().toString(),
+      username: currentUser?.username || 'GUEST',
+      aiName: aiName,
+      userMessage: userMsg.text,
+      aiResponse: `ERROR: ${error.message || 'Unknown error'}`,
+      timestamp: new Date().toLocaleTimeString()
+    });
+    
+  } finally {
+    setIsThinking(false);
+  }
+};
   const currentAiName = currentUser?.aiName?.toUpperCase() || 'CENTRALGPT';
 
   return (
