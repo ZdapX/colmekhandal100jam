@@ -86,24 +86,62 @@ const AppContent: React.FC = () => {
 
   // 1. Initial Load: Get Session (LocalStorage) & Config (Supabase)
   useEffect(() => {
-    const loadSystem = async () => {
-        // A. Load Config from DB (Real-time data)
-        const remoteConfig = await fetchAppConfig();
-        if (remoteConfig) {
-            console.log("Remote Config Loaded:", remoteConfig);
-            setConfig(prev => ({ ...prev, ...remoteConfig }));
-        }
+const loadSystem = async () => {
+  console.log("🚀 Loading system configuration...");
+  
+  // A. Load Config dari DB (Real-time data)
+  const remoteConfig = await fetchAppConfig();
+  console.log("📦 Remote config loaded:", remoteConfig);
+  
+  // B. Tambah fallback ke environment key jika ada
+  const envKey = import.meta.env?.VITE_GEMINI_API_KEY || '';
+  let finalKeys: string[] = [];
+  
+  if (remoteConfig?.geminiKeys && remoteConfig.geminiKeys.length > 0) {
+    finalKeys = [...remoteConfig.geminiKeys];
+    console.log(`📋 Using ${finalKeys.length} keys from database`);
+  }
+  
+  // Tambah environment key jika belum ada di list
+  if (envKey && envKey.trim() !== '' && !finalKeys.includes(envKey.trim())) {
+    finalKeys.push(envKey.trim());
+    console.log("➕ Added environment API key");
+  }
+  
+  // Jika tidak ada key sama sekali, beri warning
+  if (finalKeys.length === 0) {
+    console.warn("⚠️ WARNING: No Gemini API keys configured!");
+    // Bisa tambah alert atau UI notification di sini
+  } else {
+    console.log(`✅ Total API keys: ${finalKeys.length}`);
+  }
+  
+  // Update config dengan keys yang sudah difilter
+  const updatedConfig = {
+    ...remoteConfig,
+    geminiKeys: finalKeys
+  };
+  
+  setConfig(prev => ({ 
+    ...prev, 
+    ...updatedConfig 
+  }));
+  
+  // C. Initialize Gemini dengan semua keys
+  if (finalKeys.length > 0) {
+    console.log("🔧 Initializing Gemini service...");
+    initializeGemini(finalKeys);
+  }
 
-        // B. Check for existing session (LocalStorage)
-        const storedSession = getSession();
-        if (storedSession) {
-            console.log("Restoring session for:", storedSession.username);
-            setCurrentUser(storedSession);
-        }
-    };
-
-    loadSystem();
-  }, []);
+  // D. Check untuk existing session (LocalStorage)
+  const storedSession = getSession();
+  if (storedSession) {
+    console.log(`🔍 Restoring session for: ${storedSession.username}`);
+    setCurrentUser(storedSession);
+  }
+  
+  console.log("✅ System initialization complete");
+};
 
   // 2. Sync Gemini Keys when config changes
   useEffect(() => {
