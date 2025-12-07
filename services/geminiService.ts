@@ -1,103 +1,93 @@
+import { GoogleGenerativeAI } from '@google/genai';
 
-import { GoogleGenAI } from "@google/genai";
+let geminiClient: GoogleGenerativeAI | null = null;
+let currentKeyIndex = 0;
+let availableKeys: string[] = [];
 
-// Store the pool of available keys
-let keyPool: string[] = [];
-
-// Fallback to process.env if no keys provided in config
-const getEnvKey = () => {
-    try {
-        if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-            return process.env.API_KEY;
-        }
-        // Fallback for window.process polyfill
-        if ((window as any).process?.env?.API_KEY) {
-            return (window as any).process.env.API_KEY;
-        }
-    } catch (e) {
-        // Ignore
+export const initializeGemini = (keys: string[]) => {
+  if (keys && keys.length > 0) {
+    availableKeys = keys.filter(key => key && key.trim() !== '');
+    currentKeyIndex = 0;
+    if (availableKeys.length > 0) {
+      geminiClient = new GoogleGenerativeAI(availableKeys[currentKeyIndex]);
+      console.log(`Gemini initialized with ${availableKeys.length} keys`);
     }
-    return '';
+  }
 };
 
-// Initialize or update the key pool
-export const initializeGemini = (apiKeys: string[]) => {
-    // Sanitize keys: Trim whitespace, remove empty strings
-    const sanitizedKeys = apiKeys
-        .map(k => k.trim())
-        .filter(k => k.length > 0);
-    
-    keyPool = sanitizedKeys;
-    
-    console.log(`[GeminiService] Initialized with ${keyPool.length} active keys.`);
-};
-
-// Get a client instance using a random key from the pool
-const getAiClient = () => {
-    let selectedKey = '';
-
-    if (keyPool.length > 0) {
-        // Simple rotation: Pick random key to distribute load
-        const randomIndex = Math.floor(Math.random() * keyPool.length);
-        selectedKey = keyPool[randomIndex];
-    } else {
-        // Try fallback
-        selectedKey = getEnvKey();
-    }
-
-    if (!selectedKey) {
-        throw new Error("No Valid API Keys Available. Please configure keys in Admin Panel.");
-    }
-
-    // Return new instance with the selected key
-    return new GoogleGenAI({ apiKey: selectedKey });
+const rotateKey = (): boolean => {
+  if (availableKeys.length <= 1) {
+    console.warn("No other keys available for rotation");
+    return false;
+  }
+  
+  currentKeyIndex = (currentKeyIndex + 1) % availableKeys.length;
+  console.log(`Rotating to key index: ${currentKeyIndex}`);
+  
+  geminiClient = new GoogleGenerativeAI(availableKeys[currentKeyIndex]);
+  return true;
 };
 
 export const generateResponse = async (
-  prompt: string,
-  systemInstruction: string,
-  base64Image?: string
+  prompt: string, 
+  persona: string, 
+  imageBase64?: string
 ): Promise<string> => {
-  try {
-    const ai = getAiClient();
-    
-    const parts: any[] = [{ text: prompt }];
-
-    if (base64Image) {
-      // Remove data URL prefix if present for proper base64 extraction
-      const cleanBase64 = base64Image.split(',')[1];
-      parts.unshift({
-        inlineData: {
-          mimeType: 'image/jpeg', 
-          data: cleanBase64
-        }
-      });
-    }
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: {
-        role: 'user',
-        parts: parts
-      },
-      config: {
-        systemInstruction: systemInstruction,
-        temperature: 0.9,
-      }
-    });
-
-    return response.text || "No response generated.";
-  } catch (error: any) {
-    console.error("Gemini Error:", error);
-    
-    // enhance error message for UI
-    let msg = error.message || "Unknown error occurred.";
-    if (msg.includes("400") || msg.includes("INVALID_ARGUMENT")) {
-        msg = "API Key Invalid or Expired (400). Check Admin Config.";
-    } else if (msg.includes("429")) {
-        msg = "Rate Limit Exceeded (429). Rotating keys...";
-    }
-    
-    return `System Failure: ${msg}`;
+  if (!geminiClient) {
+    throw new Error("Gemini not initialized. Please check your API keys.");
   }
+
+  const maxRetries = availableKeys.length || 1;
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const model = geminiClient.getGenerativeModel({ model: "gemini-1.5-pro" });
+      
+      const fullPrompt = `${persona}\n\nUser: ${prompt}\n\nAI Response:`;
+      
+      if (imageBase64) {
+        // Remove data URL prefix if present
+        const base64Data = imageBase64.includes('base64,') 
+          ? imageBase64.split('base64,')[1] 
+          : imageBase64;
+        
+        const imagePart = {
+          inlineData: {
+            data: base64Data,
+            mimeType: "image/jpeg"
+          }
+        };
+        
+        const textPart = { text: fullPrompt };
+        const result = await model.generateContent([textPart, imagePart]);
+        return result.response.text();
+      } else {
+        const result = await model.generateContent(fullPrompt);
+        return result.response.text();
+      }
+      
+    } catch (error: any) {
+      console.error(`Attempt ${attempt + 1} failed:`, error.message);
+      lastError = error;
+      
+      // Check if it's a rate limit error
+      if (error.message?.includes('429') || error.message?.includes('rate limit') || error.message?.includes('quota')) {
+        console.warn(`Rate limit detected on key ${currentKeyIndex + 1}`);
+        
+        // Try to rotate key
+        if (rotateKey() && attempt < maxRetries - 1) {
+          console.log(`Retrying with new key...`);
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+          continue;
+        }
+      }
+      
+      // For other errors, break immediately
+      break;
+    }
+  }
+  
+  // If all attempts failed
+  throw lastError || new Error("Failed to generate response after all attempts");
 };
